@@ -1,0 +1,9 @@
+[package]
+name = "bug-status"
+version = "0.1.0"
+authors = ["Blake Winton <bwinton@latte.ca>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
