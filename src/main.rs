@@ -10,10 +10,14 @@ struct State {
     landed: usize,
     in_review: usize,
     assigned: usize,
-    p1: usize,
-    p2: usize,
-    p3: usize,
-    other: usize,
+    p1_left: usize,
+    p2_left: usize,
+    p3_left: usize,
+    other_left: usize,
+    p1_open: usize,
+    p2_open: usize,
+    p3_open: usize,
+    other_open: usize,
 }
 impl State {
     fn new(name: &str) -> Self {
@@ -22,10 +26,14 @@ impl State {
             landed: 0,
             in_review: 0,
             assigned: 0,
-            p1: 0,
-            p2: 0,
-            p3: 0,
-            other: 0,
+            p1_left: 0,
+            p2_left: 0,
+            p3_left: 0,
+            other_left: 0,
+            p1_open: 0,
+            p2_open: 0,
+            p3_open: 0,
+            other_open: 0,
         }
     }
 }
@@ -35,15 +43,20 @@ impl Display for State {
         //    Unassigned: 7 P1s, 7 P2s, 4 P3s, 1 Unknown.
         f.write_fmt(format_args!(
             "  {} (81 only) - {} patches landed, {} patches up for review, {} more bugs assigned.
-    Remaining: {} P1s, {} P2s, {} P3s, {} Unknown.",
+    Without Patches: {} P1s, {} P2s, {} P3s, {} Unknown.
+    Total Open:      {} P1s, {} P2s, {} P3s, {} Unknown.",
             self.name,
             self.landed,
             self.in_review,
             self.assigned,
-            self.p1,
-            self.p2,
-            self.p3,
-            self.other
+            self.p1_left,
+            self.p2_left,
+            self.p3_left,
+            self.other_left,
+            self.p1_open,
+            self.p2_open,
+            self.p3_open,
+            self.other_open,
         ))
     }
 }
@@ -65,22 +78,28 @@ fn categorize_bug(bug: &HashMap<String, Value>, state: &mut State) {
             }
         }
         "ASSIGNED" => {
+            match priority {
+                "P1" => state.p1_open += 1,
+                "P2" => state.p2_open += 1,
+                "P3" => state.p3_open += 1,
+                _ => state.other_open += 1,
+            }
             if has_patch {
                 state.in_review += 1;
             } else {
                 match priority {
-                    "P1" => state.p1 += 1,
-                    "P2" => state.p2 += 1,
-                    "P3" => state.p3 += 1,
-                    _ => state.other += 1,
+                    "P1" => state.p1_left += 1,
+                    "P2" => state.p2_left += 1,
+                    "P3" => state.p3_left += 1,
+                    _ => state.other_left += 1,
                 }
             }
         }
-        "NEW" | "UNCONFIRMED" => match priority {
-            "P1" => state.p1 += 1,
-            "P2" => state.p2 += 1,
-            "P3" => state.p3 += 1,
-            _ => state.other += 1,
+        "NEW" | "UNCONFIRMED" | "REOPENED" => match priority {
+            "P1" => { state.p1_left += 1; state.p1_open += 1},
+            "P2" => { state.p2_left += 1; state.p2_open += 1},
+            "P3" => { state.p3_left += 1; state.p3_open += 1},
+            _ => { state.other_left += 1; state.other_open += 1},
         },
         _ => {
             println!("Unknown status!!!\n  {}\n  Bug {:?}\n", status, bug);
