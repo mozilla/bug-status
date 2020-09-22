@@ -1,5 +1,6 @@
-use std::{collections::HashMap, error::Error, fmt::Display};
+use std::{collections::HashMap, fmt::Display};
 
+use color_eyre::eyre::Result;
 use rayon::prelude::*;
 use serde_json::Value;
 
@@ -101,10 +102,22 @@ fn categorize_bug(bug: &HashMap<String, Value>, state: &mut State) {
             }
         }
         "NEW" | "UNCONFIRMED" | "REOPENED" => match priority {
-            "P1" => { state.p1_left += 1; state.p1_open += 1},
-            "P2" => { state.p2_left += 1; state.p2_open += 1},
-            "P3" | "P4" | "P5" => { state.plower_left += 1; state.plower_open += 1},
-            _ => { state.other_left += 1; state.other_open += 1},
+            "P1" => {
+                state.p1_left += 1;
+                state.p1_open += 1
+            }
+            "P2" => {
+                state.p2_left += 1;
+                state.p2_open += 1
+            }
+            "P3" | "P4" | "P5" => {
+                state.plower_left += 1;
+                state.plower_open += 1
+            }
+            _ => {
+                state.other_left += 1;
+                state.other_open += 1
+            }
         },
         _ => {
             println!("Unknown status!!!\n  {}\n  Bug {:?}\n", status, bug);
@@ -112,7 +125,8 @@ fn categorize_bug(bug: &HashMap<String, Value>, state: &mut State) {
     }
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<()> {
+    color_eyre::install()?;
     let summary: Vec<(State,State)> = ["81", "82"].par_iter().map(|version| {
         let mut frontend_state: State = State::new("Front-end", version);
         let mut platform_state: State = State::new("Platform", version);
@@ -120,8 +134,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         let url = format!("https://bugzilla.mozilla.org/rest/bug?whiteboard=[print2020_v{}]&include_fields=id,summary,status,product,priority,attachments.content_type", version);
         // println!("Getting data for {}", url);
-        let resp = reqwest::blocking::get(&url).expect(&format!("Could not get data for {}", version))
-            .json::<HashMap<String, Vec<HashMap<String, Value>>>>().expect(&format!("Could not parse json for {}", version));
+        let resp = reqwest::blocking::get(&url).unwrap_or_else(|_| panic!("Could not get data for {}", version))
+            .json::<HashMap<String, Vec<HashMap<String, Value>>>>().unwrap_or_else(|_| panic!("Could not parse json for {}", version));
         let bugs = &resp["bugs"];
 
         // let raw = include_str!("../bug-data.json");
@@ -156,7 +170,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         if frontend.interesting() || platform.interesting() {
             println!();
         }
-
     }
     Ok(())
 }
