@@ -21,10 +21,10 @@ struct State {
     other_open: usize,
 }
 impl State {
-    fn new(name: &str, version: &str) -> Self {
+    fn new(name: &str, version: i32) -> Self {
         State {
             name: name.to_owned(),
-            version: version.to_owned(),
+            version: version.to_string(),
             landed: 0,
             in_review: 0,
             assigned: 0,
@@ -127,7 +127,7 @@ fn categorize_bug(bug: &HashMap<String, Value>, state: &mut State) {
 
 fn main() -> Result<()> {
     color_eyre::install()?;
-    let summary: Vec<(State,State)> = ["81", "82"].par_iter().map(|version| {
+    let summary: Vec<(State,State)> = (81..=85).into_par_iter().map(|version: i32| {
         let mut frontend_state: State = State::new("Front-end", version);
         let mut platform_state: State = State::new("Platform", version);
         let mut seen = vec![];
