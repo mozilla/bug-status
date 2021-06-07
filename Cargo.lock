@@ -62,6 +62,7 @@ version = "0.1.0"
 dependencies = [
  "color-eyre",
  "indicatif",
+ "lazy_static",
  "rayon",
  "reqwest",
  "serde",
