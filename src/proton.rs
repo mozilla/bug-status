@@ -27,6 +27,7 @@ struct JiraIssue {
     key: String,
     /** The link to this issue in JIRA */
     id: String,
+    assignee: Option<String>,
     status: String,
     points: Option<u64>,
 }
@@ -64,6 +65,20 @@ impl JiraIssue {
             .unwrap_or_else(|| panic!("Could not get status name from {}", &key))
             .to_string();
 
+        let assignee = if let Some(assignee) = fields.get("assignee") {
+            if let Some(assignee) = assignee.as_object() {
+                if let Some(assignee) = assignee.get("name") {
+                    assignee.as_str().map(|x| x.to_string())
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
         let points = fields
             .get("customfield_10014")
             .unwrap_or(&Value::Null)
@@ -73,6 +88,7 @@ impl JiraIssue {
         Self {
             key,
             id,
+            assignee,
             status,
             points,
         }
@@ -121,6 +137,7 @@ struct BugzillaBug {
     id: String,
     status: String,
     points: Option<u64>,
+    assignee: Option<String>,
     has_patch: bool,
     jira: JiraIssue,
 }
@@ -147,9 +164,15 @@ impl BugzillaBug {
             if let Some(attachments) = attachments.as_array() {
                 attachments.iter().any(|attachment| {
                     if let Some(attachment) = attachment.as_object() {
+                        let is_obsolete = if let Some(obsolete) = attachment.get("is_obsolete") {
+                            obsolete.as_u64().unwrap_or_default() == 1
+                        } else {
+                            false
+                        };
+
                         if let Some(content_type) = attachment.get("content_type") {
                             if let Some(content_type) = content_type.as_str() {
-                                content_type == "text/x-phabricator-request"
+                                content_type == "text/x-phabricator-request" && !is_obsolete
                             } else {
                                 false
                             }
@@ -167,11 +190,21 @@ impl BugzillaBug {
             false
         };
 
+        let mut assignee = if let Some(assignee) = bz_data.get("assigned_to") {
+            assignee.as_str().map(|x| x.to_string())
+        } else {
+            None
+        };
+        if assignee == Some("nobody@mozilla.org".to_string()) {
+            assignee = None;
+        }
+
         let jira = link.jira;
         Self {
             id,
             status,
             points,
+            assignee,
             has_patch,
             jira,
         }
@@ -255,7 +288,19 @@ fn main() -> Result<()> {
         }
     }
 
-    if !header1 && !header2 {
+    let mut header3 = false;
+    for bug in &bugs {
+        if bug.assignee.is_some() != bug.jira.assignee.is_some() {
+            if !header3 {
+                println!("\n\nChanged assignees:");
+                header3 = true;
+            }
+            println!("  https://bugzilla.mozilla.org/show_bug.cgi?id={} ({:?}) => https://jira.mozilla.com/browse/{} ({:?})",
+                bug.id, bug.assignee, bug.jira.key, bug.jira.assignee);
+        }
+    }
+
+    if !header1 && !header2 && !header3 {
         println!("\n\nNo changes necessary! 🎉\n");
     }
     Ok(())
@@ -303,7 +348,7 @@ fn get_bugs(
         "Getting bugs: {spinner:.green} [{elapsed_precise}] [{bar:50.cyan/blue}] ({pos}/{len}, ETA {eta})",
     ));
     for links in links.chunks(200) {
-        let list = format!("https://bugzilla.mozilla.org/rest/bug?id={}&include_fields=id,summary,status,product,priority,attachments.content_type,cf_fx_points",
+        let list = format!("https://bugzilla.mozilla.org/rest/bug?id={}&include_fields=id,summary,status,product,priority,attachments.content_type,attachments.is_obsolete,cf_fx_points,assigned_to",
             links.iter().map(|x| x.bugzilla.as_str()).collect::<Vec<_>>().join(","));
         let bugs: HashMap<String, Value> = get_link(&list, true).unwrap();
         bar.inc(links.len() as u64);
@@ -376,7 +421,7 @@ fn get_list() -> Result<Vec<JiraIssue>> {
         "Getting issues: {spinner:.green} [{elapsed_precise}] [{bar:50.cyan/blue}] ({pos}/{len}, ETA {eta})",
     ));
     for issues in issues.chunks(200) {
-        let list = format!("https://jira.mozilla.com/rest/api/2/search?jql=issueKey%20in%20({})&fields=status,customfield_10014&maxResults=1000",
+        let list = format!("https://jira.mozilla.com/rest/api/2/search?jql=issueKey%20in%20({})&fields=status,customfield_10014,assignee&maxResults=1000",
             issues.join("%2C"));
         let issues: HashMap<String, Value> = get_link(&list, true).unwrap();
         bar.inc(issues.len() as u64);
