@@ -20,7 +20,9 @@ lazy_static! {
         }
         password.unwrap()
     };
+    static ref BLAKE: Option<String> = Some("bwinton@mozilla.com".to_string());
 }
+
 #[derive(Clone, Debug)]
 struct JiraIssue {
     /** The JIRA key, FIDEFE-123 */
@@ -219,9 +221,30 @@ impl BugzillaBug {
                     "In Progress".to_string()
                 }
             }
-            "NEW" | "UNCONFIRMED" | "REOPENED" => "Open".to_string(),
-            "???" => "Unknown".to_string(),
+            "NEW" | "UNCONFIRMED" => "Open".to_string(),
+            "REOPENED" => "Reopened".to_string(),
+            "RESOLVED" => "Closed".to_string(),
             _ => self.status.clone(),
+        }
+    }
+
+    pub fn get_jira_assignee(&self) -> Option<String> {
+        let assignee = self.assignee.as_ref()?;
+        // Some employees use other addresses in bugzilla.
+        match assignee.as_str() {
+            "enndeakin@gmail.com" => Some("neil@mozilla.com".to_string()),
+            "pbz@mozilla.com" => Some("pzuhlcke@mozilla.com".to_string()),
+            "gl@mozilla.com" => Some("gluong@mozilla.com".to_string()),
+            "jaws@mozilla.com" => Some("jwein@mozilla.com".to_string()),
+            "tnikkel@gmail.com" => Some("tnikkel@mozilla.com".to_string()),
+            "dao+bmo@mozilla.com" => Some("dgottwald@mozilla.com".to_string()),
+            "edilee@mozilla.com" => Some("elee@mozilla.com".to_string()),
+            "eitan@monotonous.org" => Some("eisaacson@mozilla.com".to_string()),
+            "andrei.br92@gmail.com" => Some("aoprea@mozilla.com".to_string()),
+            // Anyone else at Mozilla just gets their address.
+            x if x.ends_with("@mozilla.com") => Some(x.to_string()),
+            // External contributors get mapped to me. ;D
+            _ => BLAKE.clone(),
         }
     }
 }
@@ -290,7 +313,7 @@ fn main() -> Result<()> {
 
     let mut header3 = false;
     for bug in &bugs {
-        if bug.assignee.is_some() != bug.jira.assignee.is_some() {
+        if bug.assignee.is_some() && bug.get_jira_assignee() != bug.jira.assignee {
             if !header3 {
                 println!("\n\nChanged assignees:");
                 header3 = true;
