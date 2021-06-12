@@ -30,6 +30,7 @@ struct JiraIssue {
     /** The link to this issue in JIRA */
     id: String,
     assignee: Option<String>,
+    epic: Option<String>,
     status: String,
     points: Option<u64>,
 }
@@ -55,17 +56,6 @@ impl JiraIssue {
             .unwrap_or_else(|| panic!("Could not get fields from {}", &key))
             .as_object()
             .unwrap_or_else(|| panic!("Could not get fields from {}", &key));
-        let status = fields
-            .get("status")
-            .unwrap_or_else(|| panic!("Could not get status from {}", &key))
-            .as_object()
-            .unwrap_or_else(|| panic!("Could not get status from {}", &key));
-        let status = status
-            .get("name")
-            .unwrap_or_else(|| panic!("Could not get status name from {}", &key))
-            .as_str()
-            .unwrap_or_else(|| panic!("Could not get status name from {}", &key))
-            .to_string();
 
         let assignee = if let Some(assignee) = fields.get("assignee") {
             if let Some(assignee) = assignee.as_object() {
@@ -81,6 +71,24 @@ impl JiraIssue {
             None
         };
 
+        let epic = fields
+            .get("customfield_10008")
+            .unwrap_or(&Value::Null)
+            .as_str()
+            .map(|x| x.to_string());
+
+        let status = fields
+            .get("status")
+            .unwrap_or_else(|| panic!("Could not get status from {}", &key))
+            .as_object()
+            .unwrap_or_else(|| panic!("Could not get status from {}", &key));
+        let status = status
+            .get("name")
+            .unwrap_or_else(|| panic!("Could not get status name from {}", &key))
+            .as_str()
+            .unwrap_or_else(|| panic!("Could not get status name from {}", &key))
+            .to_string();
+
         let points = fields
             .get("customfield_10014")
             .unwrap_or(&Value::Null)
@@ -91,6 +99,7 @@ impl JiraIssue {
             key,
             id,
             assignee,
+            epic,
             status,
             points,
         }
@@ -267,7 +276,7 @@ fn main() -> Result<()> {
     println!("Found {} items in the cache.", cached_data.len());
 
     let issues = get_list()?;
-    let bugs = get_bugs(issues, &mut cached_data)?;
+    let mut bugs = get_bugs(issues, &mut cached_data)?;
 
     // `create` will also truncate an existing file.
     let cache_file = File::create(&cache_name)?;
@@ -287,43 +296,78 @@ fn main() -> Result<()> {
     //         .join(",")
     // );
 
-    let mut header1 = false;
+    let mut need_changes = false;
+    let mut header = false;
+    for bug in bugs.iter_mut() {
+        if bug.get_jira_status() == "Open" && bug.assignee.is_some() {
+            if !header {
+                println!("\n\nChanged assignee:");
+                header = true;
+            }
+            println!(
+                "  https://bugzilla.mozilla.org/show_bug.cgi?id={} ({:?}) => ({:?})",
+                bug.id,
+                bug.get_jira_status(),
+                bug.assignee.as_ref().unwrap()
+            );
+            bug.status = "ASSIGNED".to_string();
+        }
+    }
+    need_changes |= header;
+
+    let mut header = false;
     for bug in &bugs {
         if bug.points.is_some() && bug.points != bug.jira.points {
-            if !header1 {
+            if !header {
                 println!("\n\nChanged points:");
-                header1 = true;
+                header = true;
             }
             println!("  https://bugzilla.mozilla.org/show_bug.cgi?id={} ({:?}) => https://jira.mozilla.com/browse/{} ({:?})",
                 bug.id, bug.points, bug.jira.key, bug.jira.points);
         }
     }
+    need_changes |= header;
 
-    let mut header2 = false;
+    let mut header = false;
     for bug in &bugs {
         if bug.get_jira_status() != bug.jira.status {
-            if !header2 {
+            if !header {
                 println!("\n\nChanged status:");
-                header2 = true;
+                header = true;
             }
             println!("  https://bugzilla.mozilla.org/show_bug.cgi?id={} ({:?}) => https://jira.mozilla.com/browse/{} ({:?})",
                 bug.id, bug.get_jira_status(), bug.jira.key, bug.jira.status);
         }
     }
+    need_changes |= header;
 
-    let mut header3 = false;
+    let mut header = false;
     for bug in &bugs {
         if bug.assignee.is_some() && bug.get_jira_assignee() != bug.jira.assignee {
-            if !header3 {
+            if !header {
                 println!("\n\nChanged assignees:");
-                header3 = true;
+                header = true;
             }
             println!("  https://bugzilla.mozilla.org/show_bug.cgi?id={} ({:?}) => https://jira.mozilla.com/browse/{} ({:?})",
                 bug.id, bug.assignee, bug.jira.key, bug.jira.assignee);
         }
     }
+    need_changes |= header;
 
-    if !header1 && !header2 && !header3 {
+    let mut header = false;
+    for bug in &bugs {
+        if bug.jira.epic.is_none() {
+            if !header {
+                println!("\n\nMissing epics:");
+                header = true;
+            }
+            println!("  https://bugzilla.mozilla.org/show_bug.cgi?id={} => https://jira.mozilla.com/browse/{}",
+                bug.id, bug.jira.key);
+        }
+    }
+    need_changes |= header;
+
+    if !need_changes {
         println!("\n\nNo changes necessary! 🎉\n");
     }
     Ok(())
@@ -444,7 +488,7 @@ fn get_list() -> Result<Vec<JiraIssue>> {
         "Getting issues: {spinner:.green} [{elapsed_precise}] [{bar:50.cyan/blue}] ({pos}/{len}, ETA {eta})",
     ));
     for issues in issues.chunks(200) {
-        let list = format!("https://jira.mozilla.com/rest/api/2/search?jql=issueKey%20in%20({})&fields=status,customfield_10014,assignee&maxResults=1000",
+        let list = format!("https://jira.mozilla.com/rest/api/2/search?jql=issueKey%20in%20({})&fields=status,customfield_10014,customfield_10008,assignee&maxResults=1000",
             issues.join("%2C"));
         let issues: HashMap<String, Value> = get_link(&list, true).unwrap();
         bar.inc(issues.len() as u64);
