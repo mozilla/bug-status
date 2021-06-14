@@ -245,6 +245,7 @@ impl BugzillaBug {
             "pbz@mozilla.com" => Some("pzuhlcke@mozilla.com".to_string()),
             "gl@mozilla.com" => Some("gluong@mozilla.com".to_string()),
             "jaws@mozilla.com" => Some("jwein@mozilla.com".to_string()),
+            "mozilla@kaply.com" => Some("mkaply@mozilla.com".to_string()),
             "tnikkel@gmail.com" => Some("tnikkel@mozilla.com".to_string()),
             "dao+bmo@mozilla.com" => Some("dgottwald@mozilla.com".to_string()),
             "edilee@mozilla.com" => Some("elee@mozilla.com".to_string()),
@@ -322,8 +323,8 @@ fn main() -> Result<()> {
                 println!("\n\nChanged points:");
                 header = true;
             }
-            println!("  https://bugzilla.mozilla.org/show_bug.cgi?id={} ({:?}) => https://jira.mozilla.com/browse/{} ({:?})",
-                bug.id, bug.points, bug.jira.key, bug.jira.points);
+            println!("  https://bugzilla.mozilla.org/show_bug.cgi?id={} ({:?}) => ({:?})",
+                bug.id, bug.jira.points, bug.points);
         }
     }
     need_changes |= header;
@@ -335,8 +336,8 @@ fn main() -> Result<()> {
                 println!("\n\nChanged status:");
                 header = true;
             }
-            println!("  https://bugzilla.mozilla.org/show_bug.cgi?id={} ({:?}) => https://jira.mozilla.com/browse/{} ({:?})",
-                bug.id, bug.get_jira_status(), bug.jira.key, bug.jira.status);
+            println!("  https://bugzilla.mozilla.org/show_bug.cgi?id={} ({:?}) => ({:?})",
+                bug.id, bug.jira.status, bug.get_jira_status());
         }
     }
     need_changes |= header;
@@ -348,8 +349,8 @@ fn main() -> Result<()> {
                 println!("\n\nChanged assignees:");
                 header = true;
             }
-            println!("  https://bugzilla.mozilla.org/show_bug.cgi?id={} ({:?}) => https://jira.mozilla.com/browse/{} ({:?})",
-                bug.id, bug.assignee, bug.jira.key, bug.jira.assignee);
+            println!("  https://bugzilla.mozilla.org/show_bug.cgi?id={} ({:?}) => ({:?})",
+                bug.id, bug.jira.assignee, bug.assignee);
         }
     }
     need_changes |= header;
