@@ -31,6 +31,7 @@ struct JiraIssue {
     id: String,
     assignee: Option<String>,
     epic: Option<String>,
+    sprints: Vec<String>,
     status: String,
     points: Option<u64>,
 }
@@ -59,7 +60,7 @@ impl JiraIssue {
 
         let assignee = if let Some(assignee) = fields.get("assignee") {
             if let Some(assignee) = assignee.as_object() {
-                if let Some(assignee) = assignee.get("name") {
+                if let Some(assignee) = assignee.get("emailAddress") {
                     assignee.as_str().map(|x| x.to_string())
                 } else {
                     None
@@ -72,7 +73,7 @@ impl JiraIssue {
         };
 
         let epic = fields
-            .get("customfield_10008")
+            .get("customfield_10014")
             .unwrap_or(&Value::Null)
             .as_str()
             .map(|x| x.to_string());
@@ -88,18 +89,28 @@ impl JiraIssue {
             .as_str()
             .unwrap_or_else(|| panic!("Could not get status name from {}", &key))
             .to_string();
+        let status = status.replace(" (migrated)", "");
 
         let points = fields
-            .get("customfield_10014")
+            .get("customfield_10037")
             .unwrap_or(&Value::Null)
             .as_f64()
             .map(|x| x as u64);
+
+        let empty = vec![];
+        let sprints = fields
+            .get("customfield_10020")
+            .unwrap_or(&Value::Null)
+            .as_array()
+            .unwrap_or(&empty)
+            .iter().map(|x| x.as_str().unwrap_or("???").to_owned()).collect::<Vec<_>>();
 
         Self {
             key,
             id,
             assignee,
             epic,
+            sprints,
             status,
             points,
         }
@@ -114,15 +125,19 @@ struct BugzillaJiraLink {
 }
 
 impl BugzillaJiraLink {
-    pub fn new(jira: JiraIssue, cached_data: &Map<String, Value>) -> Self {
+    pub fn new(jira: JiraIssue, cached_data: &Map<String, Value>) -> Option<Self> {
         let (bugzilla, cached) = if let Some(data) = cached_data.get(&jira.key) {
             (data.as_str().unwrap().to_owned(), false)
         } else {
             let link = format!(
-                "https://jira.mozilla.com/rest/api/2/issue/{}/remotelink",
+                "https://mozilla-hub.atlassian.net/rest/api/3/issue/{}/remotelink",
                 &jira.key
             );
             let resp: Vec<HashMap<String, Value>> = get_link(&link, true).unwrap();
+            if resp.is_empty() {
+                println!("No link for https://mozilla-hub.atlassian.net/browse/{}", &jira.key);
+                return None
+            }
             let data = resp[0]["object"]
                 .as_object()
                 .unwrap_or_else(|| panic!("Could not get object from {}", link));
@@ -135,11 +150,11 @@ impl BugzillaJiraLink {
                 true,
             )
         };
-        Self {
+        Some(Self {
             bugzilla,
             jira,
             cached,
-        }
+        })
     }
 }
 
@@ -302,13 +317,12 @@ fn main() -> Result<()> {
     for bug in bugs.iter_mut() {
         if bug.get_jira_status() == "Open" && bug.assignee.is_some() {
             if !header {
-                println!("\n\nChanged assignee:");
+                println!("\n\nAssigned bugs that are still NEW:");
                 header = true;
             }
             println!(
-                "  https://bugzilla.mozilla.org/show_bug.cgi?id={} ({:?}) => ({:?})",
+                "  https://bugzilla.mozilla.org/show_bug.cgi?id={} (NEW) => (ASSIGNED to {:?})",
                 bug.id,
-                bug.get_jira_status(),
                 bug.assignee.as_ref().unwrap()
             );
             bug.status = "ASSIGNED".to_string();
@@ -362,8 +376,22 @@ fn main() -> Result<()> {
                 println!("\n\nMissing epics:");
                 header = true;
             }
-            println!("  https://bugzilla.mozilla.org/show_bug.cgi?id={} => https://jira.mozilla.com/browse/{}",
+            println!("  https://bugzilla.mozilla.org/show_bug.cgi?id={} => https://mozilla-hub.atlassian.net/browse/{}",
                 bug.id, bug.jira.key);
+        }
+    }
+    need_changes |= header;
+
+    let mut header = false;
+    for bug in &bugs {
+        // if the status is "in progress" or better and there's no sprint, do something.
+        if !["Open".to_string(), "Reopened".to_string()].contains(&bug.jira.status) && bug.jira.sprints.is_empty() {
+            if !header {
+                println!("\n\nMissing sprints:");
+                header = true;
+            }
+            println!("  https://mozilla-hub.atlassian.net/browse/{} ({:?})",
+                bug.jira.key, bug.jira.status);
         }
     }
     need_changes |= header;
@@ -407,6 +435,7 @@ fn get_bugs(
             bar.inc(1);
             BugzillaJiraLink::new(issue, &cached_data)
         })
+        .filter_map(|x| x)
         .collect();
     bar.finish();
 
@@ -462,10 +491,7 @@ fn get_bugs(
 fn get_list() -> Result<Vec<JiraIssue>> {
     // Get the list of issues first.
     let list =
-        // Issues in a sprint: "https://jira.mozilla.com/rest/api/2/search?jql=sprint%3D1071&fields=none&maxResults=100";
-        // Issues in the backlog: "https://jira.mozilla.com/rest/agile/1.0/board/694/backlog?fields=none&maxResults=1000";
-        // All open issues:
-        "https://jira.mozilla.com/rest/agile/1.0/board/694/issue?fields=none&maxResults=1000&jql=statusCategory%20!%3D%20Done";
+        "https://mozilla-hub.atlassian.net/rest/api/3/search?fields=key&maxResults=1000&jql=statusCategory%20!%3D%20Done%20AND%20project%20%3D%20FIDEFE%20AND%20type%20!%3D%20Epic";
     let issues: HashMap<String, Value> = get_link(&list, true).unwrap();
     let issues = issues
         .get("issues")
@@ -489,7 +515,7 @@ fn get_list() -> Result<Vec<JiraIssue>> {
         "Getting issues: {spinner:.green} [{elapsed_precise}] [{bar:50.cyan/blue}] ({pos}/{len}, ETA {eta})",
     ));
     for issues in issues.chunks(200) {
-        let list = format!("https://jira.mozilla.com/rest/api/2/search?jql=issueKey%20in%20({})&fields=status,customfield_10014,customfield_10008,assignee&maxResults=1000",
+        let list = format!("https://mozilla-hub.atlassian.net/rest/api/3/search?jql=issueKey%20in%20({})&fields=status,customfield_10014,customfield_10037,customfield_10020,assignee&maxResults=1000",
             issues.join("%2C"));
         let issues: HashMap<String, Value> = get_link(&list, true).unwrap();
         bar.inc(issues.len() as u64);
