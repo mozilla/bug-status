@@ -1,3 +1,4 @@
 /target
 jira.cache
 bug-data.json
+.DS_Store

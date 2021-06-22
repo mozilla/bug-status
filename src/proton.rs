@@ -3,11 +3,15 @@ use std::env::var;
 use std::fs::{remove_file, File};
 use std::path::Path;
 
+use clap::Arg;
 use color_eyre::eyre::{eyre, Result};
 use indicatif::{ProgressBar, ProgressStyle};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::Deserialize;
 use serde_json::{from_reader, to_writer_pretty, Map, Value};
+
+#[macro_use]
+extern crate clap;
 
 #[macro_use]
 extern crate lazy_static;
@@ -20,7 +24,16 @@ lazy_static! {
         }
         password.unwrap()
     };
-    static ref BLAKE: Option<String> = Some("bwinton@mozilla.com".to_string());
+
+    static ref JIRA_USERNAME: String = {
+        let password = var("JIRA_USERNAME");
+        if password.is_err() {
+            println!("Missing JIRA_USERNAME. using \"bwinton@mozilla.com\"");
+            "bwinton@mozilla.com".to_string()
+        } else {
+            password.unwrap()
+        }
+    };    static ref BLAKE: Option<String> = Some("bwinton@mozilla.com".to_string());
 }
 
 #[derive(Clone, Debug)]
@@ -171,7 +184,8 @@ struct BugzillaBug {
 impl BugzillaBug {
     pub fn new(link: BugzillaJiraLink, bz_statuses: &HashMap<String, Map<String, Value>>) -> Self {
         let id = link.bugzilla;
-        let bz_data = bz_statuses.get(&id).unwrap();
+        let bz_data = bz_statuses.get(&id)
+            .unwrap_or_else(|| panic!("Could not find link for {:?}", id));
         let status = bz_data
             .get("status")
             .unwrap_or_else(|| panic!("Could not get status from {:?}", bz_data))
@@ -266,6 +280,14 @@ impl BugzillaBug {
             "edilee@mozilla.com" => Some("elee@mozilla.com".to_string()),
             "eitan@monotonous.org" => Some("eisaacson@mozilla.com".to_string()),
             "andrei.br92@gmail.com" => Some("aoprea@mozilla.com".to_string()),
+            "mixedpuppy@gmail.com" => Some("scaraveo@mozilla.com".to_string()),
+            "tomica@gmail.com" => Some("tjovanovic@mozilla.com".to_string()),
+            "rob@robwu.nl" => Some("rwu@mozilla.com".to_string()),
+            "emilio@crisal.io" => Some("ealvarez@mozilla.com".to_string()),
+            "agi@sferro.dev" => Some("asferro@mozilla.com".to_string()),
+            "bob.silverberg@gmail.com" => Some("bsilverberg@mozilla.com".to_string()),
+            // "" => Some("@mozilla.com".to_string()),
+            // "" => Some("@mozilla.com".to_string()),
             // Anyone else at Mozilla just gets their address.
             x if x.ends_with("@mozilla.com") => Some(x.to_string()),
             // External contributors get mapped to me. ;D
@@ -276,6 +298,23 @@ impl BugzillaBug {
 
 fn main() -> Result<()> {
     color_eyre::install()?;
+
+    let matches = app_from_crate!("\n")
+    .arg(
+        Arg::new("project")
+            .short('p')
+            .about("Which project to use")
+            .long_about("Specify a project to gather data on.")
+            .takes_value(true)
+            .possible_values(&[
+                "proton",
+                "mv3",
+            ])
+            .default_value("proton"),
+    )
+    .get_matches();
+    let project = matches.value_of("project").unwrap().to_owned();
+    println!("Getting status for \"{}\"", project);
 
     let cache_name = "jira.cache";
     let cache = Path::new(&cache_name);
@@ -291,7 +330,7 @@ fn main() -> Result<()> {
     let mut cached_data: Map<String, Value> = parsed_data?;
     println!("Found {} items in the cache.", cached_data.len());
 
-    let issues = get_list()?;
+    let issues = get_list(&project)?;
     let mut bugs = get_bugs(issues, &mut cached_data)?;
 
     // `create` will also truncate an existing file.
@@ -405,7 +444,7 @@ fn main() -> Result<()> {
 fn get_link<T: for<'de> Deserialize<'de>>(link: &str, auth: bool) -> Result<T> {
     let mut request = reqwest::blocking::Client::new().get(link);
     if auth {
-        request = request.basic_auth("bwinton@mozilla.com", Some(JIRA_PASSWORD.to_string()));
+        request = request.basic_auth(JIRA_USERNAME.to_string(), Some(JIRA_PASSWORD.to_string()));
     }
     request = request.header(reqwest::header::CONTENT_TYPE, "application/json");
     let resp = request
@@ -479,6 +518,9 @@ fn get_bugs(
 
             if link.bugzilla.is_empty() {
                 None
+            } else if !bz_statuses.contains_key(&link.bugzilla) {
+                println!("Ignoring confidential bug {}", link.bugzilla);
+                None
             } else {
                 Some(BugzillaBug::new(link, &bz_statuses))
             }
@@ -488,10 +530,12 @@ fn get_bugs(
     Ok(bugs)
 }
 
-fn get_list() -> Result<Vec<JiraIssue>> {
+fn get_list(project: &str) -> Result<Vec<JiraIssue>> {
     // Get the list of issues first.
-    let list =
-        "https://mozilla-hub.atlassian.net/rest/api/3/search?fields=key&maxResults=1000&jql=statusCategory%20!%3D%20Done%20AND%20project%20%3D%20FIDEFE%20AND%20type%20!%3D%20Epic";
+    let list = match project {
+        "mv3" => "https://mozilla-hub.atlassian.net/rest/api/3/search?fields=key&maxResults=1000&jql=statusCategory%20!%3D%20Done%20AND%20project%20%3D%20WEBEXT%20AND%20type%20!%3D%20Epic",
+        _ => "https://mozilla-hub.atlassian.net/rest/api/3/search?fields=key&maxResults=1000&jql=statusCategory%20!%3D%20Done%20AND%20project%20%3D%20FIDEFE%20AND%20type%20!%3D%20Epic",
+    };
     let issues: HashMap<String, Value> = get_link(&list, true).unwrap();
     let issues = issues
         .get("issues")
