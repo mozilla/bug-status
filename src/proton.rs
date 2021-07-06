@@ -270,24 +270,25 @@ impl BugzillaBug {
         let assignee = self.assignee.as_ref()?;
         // Some employees use other addresses in bugzilla.
         match assignee.as_str() {
-            "enndeakin@gmail.com" => Some("neil@mozilla.com".to_string()),
-            "pbz@mozilla.com" => Some("pzuhlcke@mozilla.com".to_string()),
-            "gl@mozilla.com" => Some("gluong@mozilla.com".to_string()),
-            "jaws@mozilla.com" => Some("jwein@mozilla.com".to_string()),
-            "mozilla@kaply.com" => Some("mkaply@mozilla.com".to_string()),
-            "tnikkel@gmail.com" => Some("tnikkel@mozilla.com".to_string()),
+            "agi@sferro.dev" => Some("asferro@mozilla.com".to_string()),
+            "andrei.br92@gmail.com" => Some("aoprea@mozilla.com".to_string()),
+            "bob.silverberg@gmail.com" => Some("bsilverberg@mozilla.com".to_string()),
             "dao+bmo@mozilla.com" => Some("dgottwald@mozilla.com".to_string()),
             "edilee@mozilla.com" => Some("elee@mozilla.com".to_string()),
             "eitan@monotonous.org" => Some("eisaacson@mozilla.com".to_string()),
-            "andrei.br92@gmail.com" => Some("aoprea@mozilla.com".to_string()),
-            "mixedpuppy@gmail.com" => Some("scaraveo@mozilla.com".to_string()),
-            "tomica@gmail.com" => Some("tjovanovic@mozilla.com".to_string()),
-            "rob@robwu.nl" => Some("rwu@mozilla.com".to_string()),
             "emilio@crisal.io" => Some("ealvarez@mozilla.com".to_string()),
-            "agi@sferro.dev" => Some("asferro@mozilla.com".to_string()),
-            "bob.silverberg@gmail.com" => Some("bsilverberg@mozilla.com".to_string()),
+            "enndeakin@gmail.com" => Some("neil@mozilla.com".to_string()),
+            "gijskruitbosch+bugs@gmail.com" => Some("gkruitbosch@mozilla.com".to_string()),
+            "gl@mozilla.com" => Some("gluong@mozilla.com".to_string()),
+            "jaws@mozilla.com" => Some("jwein@mozilla.com".to_string()),
+            "mixedpuppy@gmail.com" => Some("scaraveo@mozilla.com".to_string()),
+            "mozilla@kaply.com" => Some("mkaply@mozilla.com".to_string()),
+            "pbz@mozilla.com" => Some("pzuhlcke@mozilla.com".to_string()),
+            "rob@robwu.nl" => Some("rwu@mozilla.com".to_string()),
+            "tnikkel@gmail.com" => Some("tnikkel@mozilla.com".to_string()),
+            "tomica@gmail.com" => Some("tjovanovic@mozilla.com".to_string()),
             // "" => Some("@mozilla.com".to_string()),
-            // "" => Some("@mozilla.com".to_string()),
+
             // Anyone else at Mozilla just gets their address.
             x if x.ends_with("@mozilla.com") => Some(x.to_string()),
             // External contributors get mapped to me. ;D
@@ -558,7 +559,7 @@ fn get_list(project: &str) -> Result<Vec<JiraIssue>> {
     bar.set_style(ProgressStyle::default_bar().template(
         "Getting issues: {spinner:.green} [{elapsed_precise}] [{bar:50.cyan/blue}] ({pos}/{len}, ETA {eta})",
     ));
-    for issues in issues.chunks(200) {
+    for issues in issues.chunks(100) {
         let list = format!("https://mozilla-hub.atlassian.net/rest/api/3/search?jql=issueKey%20in%20({})&fields=status,customfield_10014,customfield_10037,customfield_10020,assignee&maxResults=1000",
             issues.join("%2C"));
         let issues: HashMap<String, Value> = get_link(&list, true).unwrap();
