@@ -281,6 +281,7 @@ impl BugzillaBug {
             "gijskruitbosch+bugs@gmail.com" => Some("gkruitbosch@mozilla.com".to_string()),
             "gl@mozilla.com" => Some("gluong@mozilla.com".to_string()),
             "jaws@mozilla.com" => Some("jwein@mozilla.com".to_string()),
+            "jfkthame@gmail.com" => Some("jkew@mozilla.com".to_string()),
             "mixedpuppy@gmail.com" => Some("scaraveo@mozilla.com".to_string()),
             "mozilla@kaply.com" => Some("mkaply@mozilla.com".to_string()),
             "pbz@mozilla.com" => Some("pzuhlcke@mozilla.com".to_string()),
