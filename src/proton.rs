@@ -33,7 +33,10 @@ lazy_static! {
         } else {
             password.unwrap()
         }
-    };    static ref BLAKE: Option<String> = Some("bwinton@mozilla.com".to_string());
+    };
+
+    // This is going to need to change on July 23rd…
+    static ref BLAKE: Option<String> = Some("bwinton@mozilla.com".to_string());
 }
 
 #[derive(Clone, Debug)]
@@ -367,6 +370,19 @@ fn main() -> Result<()> {
                 bug.assignee.as_ref().unwrap()
             );
             bug.status = "ASSIGNED".to_string();
+        }
+    }
+    need_changes |= header;
+
+    let mut header = false;
+    for bug in &bugs {
+        if bug.assignee.is_some() && bug.points.is_none() {
+            if !header {
+                println!("\n\nMissing points:");
+                header = true;
+            }
+            println!("  https://bugzilla.mozilla.org/show_bug.cgi?id={} ({:?}) => ({:?})",
+                bug.id, bug.points, bug.jira.points);
         }
     }
     need_changes |= header;
