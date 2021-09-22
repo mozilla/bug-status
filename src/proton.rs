@@ -26,17 +26,15 @@ lazy_static! {
     };
 
     static ref JIRA_USERNAME: String = {
-        let password = var("JIRA_USERNAME");
-        if password.is_err() {
-            println!("Missing JIRA_USERNAME. using \"bwinton@mozilla.com\"");
-            "bwinton@mozilla.com".to_string()
+        let usrname = var("JIRA_USERNAME");
+        if usrname.is_err() {
+            panic!("Missing JIRA_USERNAME");
         } else {
-            password.unwrap()
+            usrname.unwrap()
         }
     };
 
-    // This is going to need to change on July 23rd…
-    static ref BLAKE: Option<String> = Some("bwinton@mozilla.com".to_string());
+    static ref PLUK: Option<String> = Some("pluk@mozilla.com".to_string());
 }
 
 #[derive(Clone, Debug)]
@@ -143,7 +141,7 @@ struct BugzillaJiraLink {
 impl BugzillaJiraLink {
     pub fn new(jira: JiraIssue, cached_data: &Map<String, Value>) -> Option<Self> {
         let (bugzilla, cached) = if let Some(data) = cached_data.get(&jira.key) {
-            (data.as_str().unwrap().to_owned(), false)
+            (data.as_str().unwrap().to_owned(), true)
         } else {
             let link = format!(
                 "https://mozilla-hub.atlassian.net/rest/api/3/issue/{}/remotelink",
@@ -163,7 +161,7 @@ impl BugzillaJiraLink {
                     .as_str()
                     .unwrap_or_else(|| panic!("Could not get url from {}", link))
                     .replace("https://bugzilla.mozilla.org/show_bug.cgi?id=", ""),
-                true,
+                false,
             )
         };
         Some(Self {
@@ -295,8 +293,8 @@ impl BugzillaBug {
 
             // Anyone else at Mozilla just gets their address.
             x if x.ends_with("@mozilla.com") => Some(x.to_string()),
-            // External contributors get mapped to me. ;D
-            _ => BLAKE.clone(),
+            // External contributors get mapped to pluk!
+            _ => PLUK.clone(),
         }
     }
 }
