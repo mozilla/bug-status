@@ -48,6 +48,7 @@ struct JiraIssue {
     sprints: Vec<String>,
     status: String,
     points: Option<u64>,
+    priority: String,
 }
 
 impl JiraIssue {
@@ -119,6 +120,22 @@ impl JiraIssue {
             .unwrap_or(&empty)
             .iter().map(|x| x.as_str().unwrap_or("???").to_owned()).collect::<Vec<_>>();
 
+        let prio = if let Some(prio) = fields.get("priority") {
+            if let Some(prio) = prio.as_object() {
+                if let Some(prio) = prio.get("id") {
+                    prio.as_str().map(|x| x.to_string())
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        let priority = prio.unwrap_or("".to_string());
+
         Self {
             key,
             id,
@@ -127,6 +144,7 @@ impl JiraIssue {
             sprints,
             status,
             points,
+            priority,
         }
     }
 }
@@ -179,6 +197,7 @@ struct BugzillaBug {
     points: Option<u64>,
     assignee: Option<String>,
     has_patch: bool,
+    priority: String,
     jira: JiraIssue,
 }
 
@@ -200,6 +219,12 @@ impl BugzillaBug {
             .unwrap_or_else(|| panic!("Could not get points from {:?}", bz_data))
             .parse::<u64>()
             .ok();
+        let priority = bz_data
+            .get("priority")
+            .unwrap_or_else(|| panic!("Could not get priority from {:?}", bz_data))
+            .as_str()
+            .unwrap_or_else(|| panic!("Could not get priority from {:?}", bz_data))
+            .to_string();
 
         let has_patch = if let Some(attachments) = bz_data.get("attachments") {
             if let Some(attachments) = attachments.as_array() {
@@ -248,6 +273,7 @@ impl BugzillaBug {
             assignee,
             has_patch,
             jira,
+            priority,
         }
     }
 
@@ -264,6 +290,18 @@ impl BugzillaBug {
             "REOPENED" => "Reopened".to_string(),
             "RESOLVED" => "Closed".to_string(),
             _ => self.status.clone(),
+        }
+    }
+
+    pub fn get_jira_priority(&self) -> String {
+        match self.priority.as_str() {
+            "P1" => "1".to_string(),
+            "P2" => "2".to_string(),
+            "P3" => "3".to_string(),
+            "P4" => "4".to_string(),
+            "P5" => "5".to_string(),
+            "--" => "10000".to_string(),
+            _ => self.priority.clone(),
         }
     }
 
@@ -453,6 +491,38 @@ fn main() -> Result<()> {
     }
     need_changes |= header;
 
+    let mut priority_map = HashMap::from([
+        ("P1", vec![]),
+        ("P2", vec![]),
+        ("P3", vec![]),
+        ("P4", vec![]),
+        ("P5", vec![]),
+        ("--", vec![]),
+    ]);
+    let mut header = false;
+    for bug in bugs.iter_mut() {
+        if bug.jira.priority != bug.get_jira_priority() {
+            if !header {
+                println!("\n\nJIRA tickets with wrong priority:");
+                header = true;
+            }
+            if priority_map.contains_key(bug.priority.as_str()) {
+                let bugs_with_prio: &mut Vec<&mut BugzillaBug> = priority_map.get_mut(bug.priority.as_str()).unwrap();
+                bugs_with_prio.push(bug);
+            }
+        }
+    }
+    if header {
+        for (prio, bugs) in priority_map.iter() {
+            println!(" {:?}", prio);
+            for bug in bugs.iter() {
+                println!("  https://mozilla-hub.atlassian.net/browse/{} ({:?})",
+                    bug.jira.key, bug.jira.priority);
+            }
+        }
+    }
+    need_changes |= header;
+
     if !need_changes {
         println!("\n\nNo changes necessary! 🎉\n");
     }
@@ -578,7 +648,7 @@ fn get_list(project: &str) -> Result<Vec<JiraIssue>> {
         "Getting issues: {spinner:.green} [{elapsed_precise}] [{bar:50.cyan/blue}] ({pos}/{len}, ETA {eta})",
     ));
     for issues in issues.chunks(100) {
-        let list = format!("https://mozilla-hub.atlassian.net/rest/api/3/search?jql=issueKey%20in%20({})&fields=status,customfield_10014,customfield_10037,customfield_10020,assignee&maxResults=1000",
+        let list = format!("https://mozilla-hub.atlassian.net/rest/api/3/search?jql=issueKey%20in%20({})&fields=status,customfield_10014,priority,customfield_10037,customfield_10020,assignee&maxResults=1000",
             issues.join("%2C"));
         let issues: HashMap<String, Value> = get_link(&list, true).unwrap();
         bar.inc(issues.len() as u64);
