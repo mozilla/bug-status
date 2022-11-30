@@ -306,12 +306,14 @@ fn main() -> Result<()> {
     .arg(
         Arg::new("project")
             .short('p')
+            .long("project")
             .about("Which project to use")
             .long_about("Specify a project to gather data on.")
             .takes_value(true)
             .possible_values(&[
                 "proton",
                 "mv3",
+                "mr22",
             ])
             .default_value("proton"),
     )
@@ -550,6 +552,7 @@ fn get_list(project: &str) -> Result<Vec<JiraIssue>> {
     // Get the list of issues first.
     let list = match project {
         "mv3" => "https://mozilla-hub.atlassian.net/rest/api/3/search?fields=key&maxResults=1000&jql=statusCategory%20!%3D%20Done%20AND%20project%20%3D%20WEBEXT%20AND%20type%20!%3D%20Epic",
+        "mr22" => "https://mozilla-hub.atlassian.net/rest/api/3/search?fields=key&maxResults=1000&jql=statusCategory%20!%3D%20Done%20AND%20(%20%22Epic%20Link%22%3D%20FIDEFE-2368%20OR%20%22Epic%20Link%22%20%3D%20FIDEFE-2157%20)",
         _ => "https://mozilla-hub.atlassian.net/rest/api/3/search?fields=key&maxResults=1000&jql=statusCategory%20!%3D%20Done%20AND%20project%20%3D%20FIDEFE%20AND%20type%20!%3D%20Epic",
     };
     let issues: HashMap<String, Value> = get_link(&list, true).unwrap();
